@@ -1,5 +1,7 @@
 # P&ID to Knowledge Graph
 
+> **Konnektr fork.** This is a fork of [ScottDuncanAI/PID-to-Knowledge-Graph](https://github.com/ScottDuncanAI/PID-to-Knowledge-Graph). It adds a Konnektr Graph sink with a DTDL v4 ontology. Everything upstream does — extraction, DuckDB, DEXPI, Neo4j/GraphML export — is unchanged.
+
 By Scott Duncan. Reach me on [LinkedIn](https://www.linkedin.com/in/s-r-duncan/) or at [scottduncanai.com](https://scottduncanai.com/).
 
 **Turn P&ID drawings into a process knowledge graph that an LLM can reason over.**
@@ -111,15 +113,43 @@ For larger projects, the graph can also be exported to Neo4j or to GraphML (for 
 
 The node and edge types are described in [`references/ontology.md`](skills/pid-to-kg/references/ontology.md). Equipment and instruments also carry the closest [DEXPI](https://dexpi.org) class in `dexpi_class`, unchanged from earlier versions.
 
+## Publish to Konnektr Graph
+
+This fork can put the same graph into [Konnektr Graph](https://github.com/konnektr-io/graph) as DTDL v4 models, digital twins and relationships. The local outputs above are still written; publishing is an extra step.
+
+```bash
+pip install -e ".[konnektr]"          # adds the konnektr-graph Python SDK
+export KONNEKTR_ENDPOINT=https://graph.example.com
+export KONNEKTR_TOKEN=...             # never store this in the repo
+
+# Review the exact payloads first; no API calls are made:
+python skills/pid-to-kg/scripts/publish_konnektr.py work/my-plant/kg --dry-run
+
+# Then publish:
+python skills/pid-to-kg/scripts/publish_konnektr.py work/my-plant/kg
+```
+
+Or publish directly from a build with `python skills/pid-to-kg/scripts/build_kg.py work/my-plant --publish-konnektr [--dry-run]`.
+
+Re-publishing is idempotent: models that already exist are left alone, and twins/relationships are upserted under the same ids. Nothing is deleted by default. `konnektr_report.md` records the counts. Twin ids are `{plantId}:{nodeId}` so multiple plants can share one Graph; the unscoped id stays in `pidId`.
+
+Query the published graph with Cypher, see [`references/cypher-queries.md`](skills/pid-to-kg/references/cypher-queries.md):
+
+```bash
+python skills/pid-to-kg/scripts/kg_query.py --konnektr --query "MATCH (n:Twin) RETURN n.\`$dtId\` AS id" --json
+```
+
+The DTDL declares telemetry and writable properties on `Instrument` and `Equipment` twins so an external stream pipeline can attach live values. **This skill never writes live data** — ingestion belongs to your streaming system (e.g. Arcadis Flows). See [`references/ontology-dtdl.md`](skills/pid-to-kg/references/ontology-dtdl.md).
+
 ## Repository layout
 
 ```
 skills/pid-to-kg/
   SKILL.md                    workflow Claude follows
-  references/                 extraction procedure, ISA-5.1 guide, symbol guide, ontology, JSON schemas
+  references/                 extraction procedure, ISA-5.1 guide, symbol guide, ontology, JSON schemas, Cypher queries, DTDL mapping
   references/dexpi/2.0.1/     official DEXPI schema and model files, used offline for validation
-  scripts/                    probe, render, hints, build, query, export, eval, crop
-  scripts/pidkg/              library: models, ISA parsing, builder, loops, QA, storage, summary
+  scripts/                    probe, render, hints, build, query, export, eval, crop, publish_konnektr
+  scripts/pidkg/              library: models, ISA parsing, builder, loops, QA, storage, summary, DTDL, Konnektr sink
   scripts/pidkg/dexpi/        DEXPI mapping, XML writer, validator and export report
 docs/                         README diagram
 tests/                        pytest suite with a synthetic two-sheet plant and synthetic PDFs
@@ -136,6 +166,7 @@ tests/                        pytest suite with a synthetic two-sheet plant and 
 
 ```bash
 pip install -e ".[dev]"
+pip install -e ".[konnektr]"   # only needed to publish to Konnektr Graph
 pytest
 python skills/pid-to-kg/scripts/build_kg.py --write-schemas   # after changing pidkg/models.py
 ```

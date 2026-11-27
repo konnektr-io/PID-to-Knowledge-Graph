@@ -35,6 +35,7 @@ Copy this checklist into your notes and tick it off:
 - [ ] 6. Build:    python scripts/build_kg.py <work>
 - [ ] 7. QA loop:  fix every error, re-check every warning, rebuild (repeat)
 - [ ] 8. Report:   summarize the results and open issues for the user
+- [ ] 9. Publish (only if the user asks): `python scripts/publish_konnektr.py <work>/kg --dry-run`, then without `--dry-run`
 ```
 
 ### 1. Probe
@@ -134,6 +135,7 @@ Point to `qa_report.md` for the details. State plainly that the graph is machine
 - `graph.json` is the canonical graph, which any tool can read.
 - `graph.duckdb` is for SQL. Its views are `equipment`, `equipment_flow`, `instruments`, `loops` and `signals`, and its table macros are `upstream(id)` and `downstream(id)`.
 - `graph.dexpi.xml` is for DEXPI-capable engineering tools.
+- Konnektr Graph holds the same graph as DTDL v4 twins and relationships when published; query it with Cypher (see [references/cypher-queries.md](references/cypher-queries.md)).
 
 Use `kg_query.py` to answer questions; add `--json` when another tool will consume the output:
 
@@ -149,3 +151,19 @@ python scripts/kg_query.py <work>/kg sql "SELECT * FROM equipment_flow"
 To measure extraction quality on a sheet, hand-check it into a small gold file (format in `scripts/eval_kg.py`) and run `python scripts/eval_kg.py <work>/kg gold.json`: it reports tag, flow and loop precision/recall and instrument placement.
 
 To move a graph into other tools: `python scripts/export.py <work>/kg graphml` produces a file for yEd, Gephi or NetworkX, and `python scripts/export.py <work>/kg neo4j` produces CSVs plus a Cypher import script. For a `graph.json` built before DEXPI export existed, `python scripts/export.py <work>/kg dexpi` writes the DEXPI file and report using the same mapping and validation as the build.
+
+### 9. Publish to Konnektr Graph (opt-in)
+
+Only do this when the user asks, and only after the QA loop is clean. Tell the user first that the graph is machine-extracted and still needs engineering review.
+
+```bash
+pip install -e ".[konnektr]"             # SDK only needed for the real publish
+export KONNEKTR_ENDPOINT=https://...     # from the user; never guess or store credentials
+export KONNEKTR_TOKEN=...
+python scripts/publish_konnektr.py <work>/kg --dry-run   # reviewable payloads, no API calls
+python scripts/publish_konnektr.py <work>/kg             # upload models, upsert twins/relationships
+```
+
+`build_kg.py <work> --publish-konnektr [--dry-run]` does the same as part of a build. Re-publishing is idempotent; nothing is deleted. Report the counts from `konnektr_report.md`.
+
+Read [references/ontology-dtdl.md](references/ontology-dtdl.md) for the DTDL v4 mapping and the live-value contract, and [references/cypher-queries.md](references/cypher-queries.md) for queries against the published graph. `Instrument` and `Equipment` twins declare telemetry and writable properties so an external ingestion pipeline can attach live readings; **this skill never writes live data**. Do not invent credentials or endpoint URLs — ask the user.

@@ -9,6 +9,7 @@
 4. How the builder derives edges
 5. Kind vocabulary and DEXPI mapping
 6. Example queries
+7. Konnektr Graph mapping
 
 ## 1. Design choices
 
@@ -103,3 +104,10 @@ import json
 g = json.load(open("graph.json"))
 feeds = [(e["source"], e["target"]) for e in g["edges"] if e["type"] == "FEEDS"]
 ```
+
+## 7. Konnektr Graph mapping
+
+This fork also publishes this ontology as DTDL v4 interfaces, twins and relationships
+in Konnektr Graph. See [`ontology-dtdl.md`](ontology-dtdl.md) for the interface and id
+mapping and [`cypher-queries.md`](cypher-queries.md) for queries against the published
+graph. The node and edge vocabularies themselves are unchanged.
