@@ -61,3 +61,85 @@ def test_undeclared_attributes_stay_json_encoded(mini_kg):
     twin = next(t for t in twins if t["pidId"] == kg.nodes[0].id)
     assert "a_strange_field" not in twin
     assert "a_strange_field" in twin["attributesJson"]
+
+
+def test_dry_run_writes_payloads_and_never_calls_make_client(mini_kg, tmp_path, monkeypatch):
+    import pidkg.konnektr as k
+
+    monkeypatch.setattr(
+        k, "make_client",
+        lambda: (_ for _ in ()).throw(AssertionError("network called in dry run")),
+    )
+    report = k.publish(mini_kg, plant_id="mini", dry_run=True, out_dir=tmp_path)
+    assert (tmp_path / "models.json").exists()
+    assert (tmp_path / "twins.json").exists()
+    assert (tmp_path / "relationships.json").exists()
+    assert report["twins"] == len(mini_kg.nodes)
+    assert report["dry_run"] is True
+
+
+def test_publish_uploads_only_missing_models(mini_kg, monkeypatch):
+    import pidkg.konnektr as k
+
+    class Existing:
+        id = "dtmi:konnektr:pidkg:PidNode;1"
+
+    class Fake:
+        def __init__(self):
+            self.created = []
+            self.twins = []
+            self.rels = []
+
+        def list_models(self):
+            return [Existing()]
+
+        def create_models(self, models):
+            self.created.extend(models)
+
+        def upsert_digital_twin(self, _id, twin):
+            self.twins.append(twin)
+
+        def upsert_relationship(self, _src, _rid, rel):
+            self.rels.append(rel)
+
+    fake = Fake()
+    monkeypatch.setattr(k, "make_client", lambda: fake)
+    report = k.publish(mini_kg, plant_id="mini", batch_size=3, client=fake)
+    assert len(fake.created) == 10  # PidNode already existed
+    assert len(fake.twins) == len(mini_kg.nodes)
+    assert len(fake.rels) == len(mini_kg.edges)
+    assert report["batches"] == (len(mini_kg.nodes) + 2) // 3
+    assert all(t.metadata.model.startswith("dtmi:") for t in fake.twins)
+    assert all(r.relationshipName in {"FLOWS_TO", "FEEDS", "MEASURES", "SIGNAL_TO",
+                                      "MEMBER_OF", "ACTUATES", "CASCADES_TO", "TRIPS",
+                                      "PART_OF"} for r in fake.rels)
+
+
+def test_report_file_is_written(mini_kg, tmp_path, monkeypatch):
+    import pidkg.konnektr as k
+
+    monkeypatch.setattr(k, "make_client", lambda: (_ for _ in ()).throw(AssertionError()))
+    report_path = tmp_path / "konnektr_report.md"
+    k.publish(mini_kg, plant_id="mini", dry_run=True, out_dir=tmp_path,
+              report_path=report_path)
+    text = report_path.read_text(encoding="utf-8")
+    assert "Konnektr publish report" in text
+    assert "dry run: True" in text
+
+
+def test_cli_dry_run_on_a_kg_directory(mini_kg, tmp_path, capsys):
+    import publish_konnektr
+
+    kg_dir = tmp_path / "kg"
+    kg_dir.mkdir()
+    (kg_dir / "graph.json").write_text(
+        mini_kg.model_dump_json(indent=1, exclude_none=True), encoding="utf-8"
+    )
+    rc = publish_konnektr.main([str(kg_dir), "--dry-run", "--plant-id", "cli"])
+    assert rc == 0
+    payloads = kg_dir / "konnektr"
+    assert (payloads / "models.json").exists()
+    assert (payloads / "twins.json").exists()
+    assert (kg_dir / "konnektr_report.md").exists()
+    out = capsys.readouterr().out
+    assert "cli:" in out and "dry-run payloads" in out
