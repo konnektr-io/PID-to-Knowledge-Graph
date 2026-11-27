@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from pidkg.build import BuildError, build_graph, load_extractions  # noqa: E402
 from pidkg.dexpi import export_dexpi  # noqa: E402
+from pidkg.konnektr import publish  # noqa: E402
 from pidkg.models import KnowledgeGraph, PageExtraction  # noqa: E402
 from pidkg.qa import run_qa, write_report  # noqa: E402
 from pidkg.store import write_duckdb  # noqa: E402
@@ -50,15 +51,20 @@ def write_schemas() -> None:
         print(f"wrote {SCHEMA_DIR / name}")
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("work", type=Path, nargs="?")
     ap.add_argument("--out", type=Path, help="output directory (default: <work>/kg)")
     ap.add_argument("--plant-name")
     ap.add_argument("--plant-id")
     ap.add_argument("--pages", help="only build from these pages, e.g. '1-2' (default: all extracted)")
+    ap.add_argument("--publish-konnektr", action="store_true",
+                    help="publish the graph to Konnektr Graph after building")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="with --publish-konnektr: write reviewable payloads, make no API calls")
+    ap.add_argument("--konnektr-out", type=Path, help="payload directory for --dry-run")
     ap.add_argument("--write-schemas", action="store_true")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
@@ -104,6 +110,15 @@ def main() -> int:
     (out / "summary.md").write_text(write_summary(kg), encoding="utf-8")
     write_report(kg, kg.issues, out / "qa_report.md", args.work)
     dexpi = export_dexpi(kg, out)
+    if args.publish_konnektr:
+        result = publish(
+            kg, plant_id=plant_id, dry_run=args.dry_run,
+            out_dir=args.konnektr_out or (out / "konnektr"),
+            report_path=out / "konnektr_report.md",
+        )
+        print(f"  Konnektr: {result['models']} models, {result['twins']} twins, "
+              f"{result['relationships']} relationships "
+              f"({'dry run' if result['dry_run'] else 'published'})")
 
     s = kg.stats
     print(f"{plant_name}: {s['nodes']} nodes, {s['edges']} edges -> {out}")
