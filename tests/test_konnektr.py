@@ -143,3 +143,18 @@ def test_cli_dry_run_on_a_kg_directory(mini_kg, tmp_path, capsys):
     assert (kg_dir / "konnektr_report.md").exists()
     out = capsys.readouterr().out
     assert "cli:" in out and "dry-run payloads" in out
+
+
+def test_generated_models_roundtrip_through_sdk(mini_kg):
+    from konnektr_graph.types import DtdlInterface
+
+    from pidkg.konnektr import build_payloads
+
+    models, _, _ = build_payloads(mini_kg, plant_id="mini")
+    for model in models:
+        sdk_model = DtdlInterface.from_dict(model)
+        out = sdk_model.to_dict()
+        assert out["@id"] == model["@id"]
+        assert out["@context"] == "dtmi:dtdl:context;4"
+        assert out["contents"] == model["contents"]
+        assert out.get("extends") == model.get("extends")
