@@ -50,6 +50,7 @@ def node_payload(node: Node, plant_id: str, generated_at: str) -> dict[str, Any]
     contents: dict[str, Any] = {
         "plantId": plant_id,
         "pidId": node.id,
+        "type": node.type,
         "label": node.label,
         "confidence": node.confidence,
         "sheets": list(node.sheets),
@@ -84,7 +85,7 @@ def edge_payload(edge: Edge, plant_id: str) -> dict[str, Any]:
     }
     if edge.sheet:
         props["sheet"] = edge.sheet
-    for key in ("flow_direction", "off_page", "signal_type", "purpose"):
+    for key in ("flow_direction", "off_page", "signal_type", "purpose", "drawing_type"):
         if key in edge.attributes:
             value = edge.attributes[key]
             if isinstance(value, (str, int, float, bool)):

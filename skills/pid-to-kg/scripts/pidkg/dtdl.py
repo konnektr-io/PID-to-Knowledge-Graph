@@ -21,8 +21,8 @@ EDGE_TYPES = (
 )
 
 BASE_PROPS = [
-    ("plantId", "string"), ("pidId", "string"), ("label", "string"),
-    ("tag", "string"), ("kind", "string"), ("name", "string"),
+    ("plantId", "string"), ("pidId", "string"), ("type", "string"),
+    ("label", "string"), ("tag", "string"), ("kind", "string"), ("name", "string"),
     ("status", "string"), ("dexpiClass", "string"), ("sheets", "Array"),
     ("confidence", "double"), ("provenanceJson", "string"),
     ("attributesJson", "string"), ("sourceFile", "string"),
@@ -33,6 +33,7 @@ REL_PROPS = [
     ("sheet", "string"), ("attributesJson", "string"),
     ("flowDirection", "string"), ("offPage", "boolean"),
     ("signalType", "string"), ("purpose", "string"),
+    ("drawingType", "string"),
 ]
 NODE_PROPS = {
     "Sheet": [("drawingNumber", "string"), ("revision", "string"), ("drawingType", "string")],

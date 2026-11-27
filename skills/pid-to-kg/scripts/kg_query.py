@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Query a P&ID knowledge graph (for people, and as a tool for LLM agents).
+r"""Query a P&ID knowledge graph (for people, and as a tool for LLM agents).
 
 Usage:
     python kg_query.py KG stats
@@ -14,6 +14,10 @@ Usage:
 
 KG is a kg/ directory, graph.json or graph.duckdb. Add --json for machine-readable output.
 Item references accept ids, tags or labels; tags are matched loosely (FIT0502 = FIT-0502).
+
+Cypher against Konnektr Graph (no KG argument needed):
+    python kg_query.py --konnektr --query "MATCH (t:Twin) RETURN t.\`$dtId\` AS id" --json
+See references/cypher-queries.md for ready-made queries.
 """
 
 from __future__ import annotations
@@ -49,11 +53,11 @@ def _node_brief(g: Graph, nid: str) -> dict:
     return d
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("kg", type=Path)
+    ap.add_argument("kg", type=Path, nargs="?")
     ap.add_argument("command", choices=["stats", "describe", "upstream", "downstream", "path",
-                                        "loops", "loop", "instruments", "sql"])
+                                        "loops", "loop", "instruments", "sql"], nargs="?")
     ap.add_argument("args", nargs="*")
     ap.add_argument("--equipment", action="store_true", help="only equipment and boundaries")
     ap.add_argument("--depth", type=int)
@@ -63,10 +67,27 @@ def main() -> int:
     ap.add_argument("--include-pfd", action="store_true",
                     help="also traverse PFD-sheet flow when the plant has P&IDs (default: P&ID detail only)")
     ap.add_argument("--json", action="store_true")
-    a = ap.parse_args()
+    ap.add_argument("--konnektr", action="store_true", help="run Cypher against Konnektr Graph")
+    ap.add_argument("--query", help="Cypher expression for --konnektr")
+    a = ap.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
+    if a.konnektr:
+        if not a.query:
+            ap.error("--konnektr requires --query")
+        from pidkg.konnektr import make_client
+
+        rows = list(make_client().query_twins(a.query))
+        if a.json:
+            print(json.dumps(rows, indent=1, default=str))
+        else:
+            for row in rows:
+                print(json.dumps(row, default=str))
+        return 0
+
+    if a.kg is None or a.command is None:
+        ap.error("KG and command are required unless --konnektr is used")
     json_path, db_path = _resolve_paths(a.kg)
 
     if a.command == "sql":
